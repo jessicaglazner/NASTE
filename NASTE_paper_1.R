@@ -1,47 +1,22 @@
----
-title: "NASTE Physiology"
-author: "Jessica Glazner"
-date: "2026-09-15"
-output:
-  html_document:
-    code_folding: hide
-    toc: yes
-    toc_depth: 4
-    toc_float: yes
-  pdf_document:
-    toc: yes
-    toc_depth: '4'
-editor_options: 
-  chunk_output_type: console
----
-
-## Project Overview
-
-<center>  
+# load libraries
+library(lme4)
+library(lmerTest)
+library(tidyverse)
+library(car)
+library(emmeans)
+library(seacarb)
+library(magrittr)
+library(gamm4)
+library(mgcv)
+library(tidygam)
+library(tidymv)
+library(gridExtra)
+library(multcomp)
+library(multcompView)
+library(CBASSED50)
+library(lubridate)
   
-![**Image**. Experimental set-up at the Hawai‘i Institute of Marine Biology.](IMAGES/experiment.jpg){width=80%}
- 
-</center>
-
-Coral reefs receive subsidies from their adjacent terrestrial environment, and the quality of these subsidies can have substantial impacts on the health and thermal resilience of corals. There is robust experimental evidence that inorganic nutrient enrichment affects coral physiology and reef ecosystem function, and this has been used to explain reef degradation near human populations exposed to nutrient loading. Yet recent findings of enhanced coral resilience on remote, seabird-dominated islands receiving guano-derived nutrient subsidies complicate the assumption that elevated nutrients are uniformly harmful to coral reefs. Additionally, most nutrient enrichment experiments focus on how inorganic nutrient delivery affects corals, separate from the complex chemical mixtures that naturally accompany nutrient subsidies. To understand the direct effects of these complex nutrient subsidies on corals, separate from the broader ecosystem effects present on remote or populated reefs, we performed a manipulative experiment at the Hawai‘i Institute of Marine Biology, dosing corals with seabird guano, wastewater effluent, or inorganic nutrients. We exposed half of the corals to thermal stress and tracked their post-bleaching recovery. Our results demonstrate that a) corals at ambient temperature exposed to nutrient enrichment had elevated photosynthetic performance after 10 weeks of nutrient exposure, b) corals under natural seabird guano nutrient enrichment had enhanced recovery of their photosynthetic performance post-bleaching compared to the other treatments, c) wastewater effluent did not support enhanced recovery post-bleaching, and d) the inorganic nutrient treatment demonstrated the greatest susceptibility to bleaching, indicating that experiments using inorganic nutrients only are not capturing the full effects of complex nutrient sources. Our data provide experimental evidence that resource subsidy quality impacts coral thermal resilience and is contributing to different reef trajectories observed on populated vs remote island ecosystems.
-
-```{r setup chunk, setup, include = FALSE, cache=FALSE}
-
-if (!require('knitr')) install.packages('knitr'); library('knitr')
-knitr::opts_chunk$set(
-	fig.align = "center",
-	message = FALSE,
-	warning = FALSE,
-	collapse = TRUE
-)
-# load packages
-if (!require("pacman")) install.packages("pacman") # for rapid install if not in library
-
-# use pacman to load all the packages you are missing!
-pacman::p_load("knitr", "lme4", "lmerTest", "tidyverse", "car", "emmeans", "seacarb", "magrittr", "gamm4", "mgcv", "tidygam", "tidymv", "gridExtra", "multcomp", "multcompView", "lubridate", "CBASSED50")
-
-
-### general formatting for figures 
+# general formatting for figures 
 Fig.formatting <- 
   theme(axis.ticks.length = unit(0.2, "cm"),
         axis.text.x = element_text(size = 12, color = "black"),
@@ -56,16 +31,16 @@ Fig.formatting <-
 
 # Define colors for the treatments
 naste_colors <- c("Control" = "#004F7A",  
-                      "Effluent" = "#C03922",   
-                      "Guano" = "#6DAE90",   
-                      "Inorganic" = "#F2C458")  
+                  "Effluent" = "#C03922",   
+                  "Guano" = "#6DAE90",   
+                  "Inorganic" = "#F2C458")  
 
-```
+#################################################
+############# Environmental Data ###############
 
-# ENVIRONMENTAL DATA 
+### Temperature ###
+###################
 
-## Temperature
-```{r, fig.show = 'hide'}
 # calibration
 #load data
 calibration_temp <- read.csv("DATA/NASTE_temp_calibration.csv")
@@ -99,21 +74,16 @@ calibration_temp %>%
   summarise(mean_value = mean(Temp, na.rm = TRUE),
             sd_value   = sd(Temp, na.rm = TRUE))
 
-```
-
-```{r, fig.show = 'hide'}
 #load data
 Pcom_temp<-read.csv("DATA/NASTE_temp_pcom.csv")
 #pivotlonger
 Pcom_temp <- Pcom_temp %>%
-  pivot_longer(
-    cols = -c(Week, Timepoint, Date_Time),  
+  pivot_longer(cols = -c(Week, Timepoint, Date_Time),  
     names_to = "Tank",     
     values_to = "Temp")    
 #join with calibration dataframe    
 Pcom_temp <- Pcom_temp %>%
-  left_join(
-    calibration_temp %>%
+  left_join(calibration_temp %>%
       as.data.frame() %>%          
       dplyr::select(Tank, Delta) %>% 
       distinct(),
@@ -124,7 +94,7 @@ Pcom_temp <- Pcom_temp %>%
   filter(!(Tank %in% c("PCOM.SOURCE")))
 # add column for temperature treatment
 Pcom_temp <- Pcom_temp %>%
-mutate(Temp_trt = case_when(
+  mutate(Temp_trt = case_when(
     Tank %in% c("PA1","PA2","PA3","PA4","PA5","PA6","PA7","PA8","PA9","PA10","PA11","PA12") ~ "Ambient",
     Tank %in% c("PH1","PH2","PH3","PH4","PH5","PH6","PH7","PH8","PH9","PH10","PH11","PH12") ~ "Heated",
     TRUE ~ NA_character_))
@@ -132,10 +102,10 @@ mutate(Temp_trt = case_when(
 # average daily temperature measurements by tank
 Pcom_daily <- Pcom_temp %>%
   mutate(Date_Time = mdy_hm(Date_Time),
-    Date = as.Date(Date_Time)) %>%
+         Date = as.Date(Date_Time)) %>%
   group_by(Tank, Temp_trt, Date) %>%
   summarise(tank_mean_temp = mean(Temp_corrected, na.rm = TRUE),
-    .groups = "drop")
+            .groups = "drop")
 
 # add sd data
 Pcom_daily <- Pcom_daily %>%
@@ -159,15 +129,15 @@ pcom_temp_plot <- ggplot() +
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(Pcom_daily, Temp_trt == "Ambient"),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
-    geom_line(data = filter(Pcom_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
+  geom_line(data = filter(Pcom_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(Pcom_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
   labs(x = "Experiment Day",
-    y = "Daily Mean Temperature (°C)",
-    color = "Treatment",
-    fill = "Treatment",
-    title = "Porites Daily Average Temperature") +
+       y = "Daily Mean Temperature (°C)",
+       color = "Treatment",
+       fill = "Treatment",
+       title = "Porites Daily Average Temperature") +
   theme_classic(base_size = 18) +
   scale_color_manual(values = c("Ambient" = "#004F7A", "Heated" = "#c03922")) +
   scale_fill_manual(values = c("Ambient" = "#004F7A", "Heated" = "#c03922"))+
@@ -175,6 +145,7 @@ pcom_temp_plot <- ggplot() +
         axis.line = element_line(color = "black"),
         axis.text = element_text(size = 18))
 pcom_temp_plot
+
 ggsave("PLOTS/pcom_temp_plot.png", width = 9, height = 7, units = "in")
 
 
@@ -183,15 +154,15 @@ Mcap_temp<-read.csv("DATA/NASTE_temp_mcap.csv")
 #pivotlonger
 Mcap_temp <- Mcap_temp %>%
   pivot_longer(cols = -c(Week, Timepoint, Date_Time),  
-    names_to = "Tank",     
-    values_to = "Temp")    
+               names_to = "Tank",     
+               values_to = "Temp")    
 # join with calibration dataframe
 Mcap_temp <- Mcap_temp %>%
   left_join(calibration_temp %>%
-      as.data.frame() %>%          
-      dplyr::select(Tank, Delta) %>% 
-      distinct(),
-    by = "Tank")
+              as.data.frame() %>%          
+              dplyr::select(Tank, Delta) %>% 
+              distinct(),
+            by = "Tank")
 # correct loggers
 Mcap_temp <- Mcap_temp %>%
   mutate(Temp_corrected = Temp + Delta)%>%
@@ -199,17 +170,16 @@ Mcap_temp <- Mcap_temp %>%
 # add column for temperature treatment
 Mcap_temp <- Mcap_temp %>%
   mutate(Temp_trt = case_when(
-      Tank %in% c("MA1","MA2","MA3","MA4","MA5","MA6","MA7","MA8","MA9","MA10","MA11","MA12") ~ "Ambient",
-      Tank %in% c("MH1","MH2","MH3","MH4","MH5","MH6","MH7","MH8","MH9","MH10","MH11","MH12") ~ "Heated",TRUE ~ NA_character_))
+    Tank %in% c("MA1","MA2","MA3","MA4","MA5","MA6","MA7","MA8","MA9","MA10","MA11","MA12") ~ "Ambient",
+    Tank %in% c("MH1","MH2","MH3","MH4","MH5","MH6","MH7","MH8","MH9","MH10","MH11","MH12") ~ "Heated",TRUE ~ NA_character_))
 
 # average daily temperature measurements by tank
 Mcap_daily <- Mcap_temp %>%
   mutate(Date_Time = mdy_hm(Date_Time),
-    Date = as.Date(Date_Time)) %>%
+         Date = as.Date(Date_Time)) %>%
   group_by(Tank, Temp_trt, Date) %>%
   summarise(tank_mean_temp = mean(Temp_corrected, na.rm = TRUE),
-    .groups = "drop")
-
+            .groups = "drop")
 # add sd data
 Mcap_daily <- Mcap_daily %>%
   group_by(Temp_trt, Date) %>%
@@ -232,15 +202,15 @@ mcap_temp_plot <-ggplot() +
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(Mcap_daily, Temp_trt == "Ambient"),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
-    geom_line(data = filter(Mcap_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
+  geom_line(data = filter(Mcap_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(Mcap_daily, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
   labs(x = "Experiment Day",
-    y = "Daily Mean Temperature (°C)",
-    color = "Treatment",
-    fill = "Treatment",
-    title = "Montipora Daily Average Temperature") +
+       y = "Daily Mean Temperature (°C)",
+       color = "Treatment",
+       fill = "Treatment",
+       title = "Montipora Daily Average Temperature") +
   ylim(26, 32)+
   theme_classic(base_size = 18) +
   scale_color_manual(values = c("Ambient" = "#004F7A", "Heated" = "#c03922")) +
@@ -253,9 +223,6 @@ mcap_temp_plot
 ggsave("PLOTS/mcap_temp_plot.png", width = 9, height = 7, units = "in")
 
 
-```
-
-```{r}
 # first add species columns
 Pcom_daily <- Pcom_daily %>%
   mutate(Species = "Porites")
@@ -271,31 +238,30 @@ naste_temp_plot <-ggplot() +
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(naste_temp, Temp_trt == "Ambient"),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
-    geom_line(data = filter(naste_temp, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
+  geom_line(data = filter(naste_temp, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
             aes(x = Exp_Day, y = mean_temp, color = Temp_trt), linewidth = 1) +
   geom_ribbon(data = filter(naste_temp, Temp_trt == "Heated", Date <= as.Date("2023-09-15")),
               aes(x = Exp_Day, ymin = sd_lower, ymax = sd_upper, fill = Temp_trt), alpha = 0.2) +
   facet_wrap(~Species, ncol=1)+
   labs(x = "Experiment Day",
-    y = "Daily Mean Temperature (°C)",
-    color = "Treatment",
-    fill = "Treatment",
-    title = "NASTE Daily Average Temperature") +
+       y = "Daily Mean Temperature (°C)",
+       color = "Treatment",
+       fill = "Treatment",
+       title = "NASTE Daily Average Temperature") +
   ylim(26, 32)+
   theme_classic(base_size = 18) +
   scale_color_manual(values = c("Ambient" = "#004F7A", "Heated" = "#c03922")) +
   scale_fill_manual(values = c("Ambient" = "#004F7A", "Heated" = "#c03922"))+
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8), 
         axis.line = element_line(color = "black"))
-
 naste_temp_plot
 
 ggsave("PLOTS/naste_temp_plot.png", width = 10, height = 7, units = "in")
-```
 
 
-## Light
-```{r, fig.show = 'hide'}
+### Light ###
+#############
+
 calibration_light <- read.csv("DATA/NASTE_PAR_calibration.csv")
 light_mod<-aov(PAR ~ Tank, data = calibration_light)
 summary(light_mod) # p = 0.957, no difference between light loggers
@@ -308,13 +274,12 @@ calibration_light %>%
   ylab("Light (PAR)")+
   xlab("7/19 24HR Calibration Period")+
   labs(tag = "p=0.957") +
-    theme_classic()+
+  theme_classic()+
   theme(legend.position="bottom",plot.tag.position = "topright",plot.tag=element_text(size = 10))+
   guides(color = guide_legend(title="Tank"))+
   scale_color_manual(values = c( "blue","red","darkgreen", "orange"))+
   scale_x_continuous(breaks=c(0,48,96),labels=c('12AM', '12PM', '12AM'))
-```
-```{r}
+
 #Load data     
 PAR <-read.csv("DATA/NASTE_PAR.csv")
 PAR$Date <- mdy(PAR$Date)
@@ -334,7 +299,7 @@ anova(pcom_light_model)
 #remove 9/19 for heated tanks - tanks were condensed on 9/18
 PAR <- PAR %>%
   filter(!(Date %in% c("2023-09-19") & Tank %in% c("PCOM HEAT", "MCAP HEAT"))) %>%
-#remove 10/10 - experiment ended 10/9
+  #remove 10/10 - experiment ended 10/9
   filter(!(Date %in% c("2023-10-10") & Tank %in% c("PCOM AMB", "MCAP AMB")))
 
 # add column for experiment days
@@ -346,8 +311,8 @@ PAR_avg <- PAR %>%
   filter(Time >= "06:00" & Time <= "18:00") %>%
   group_by(Date, Tank, Species, Exp_Day) %>%
   summarise(PAR_mean = mean(PAR, na.rm = TRUE),
-    PAR_sd = sd(PAR, na.rm = TRUE),
-    .groups = "drop")
+            PAR_sd = sd(PAR, na.rm = TRUE),
+            .groups = "drop")
 
 
 naste_PAR_plot <- ggplot(PAR_avg, aes(x = Exp_Day, y = PAR_mean, color = Tank, group = Tank)) +
@@ -359,7 +324,7 @@ naste_PAR_plot <- ggplot(PAR_avg, aes(x = Exp_Day, y = PAR_mean, color = Tank, g
   scale_color_manual(values = c("#004F7A", "#C03922", "#004F7A", "#C03922")) +
   scale_fill_manual(values = c("#004F7A", "#C03922", "#004F7A", "#C03922")) +
   theme_classic(base_size=18)+
-    theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
+  theme(panel.border = element_rect(colour = "black", fill = NA, linewidth = 1))
 naste_PAR_plot
 
 ggsave("PLOTS/naste_PAR_plot.png", width = 10, height = 7, units = "in")
@@ -371,19 +336,18 @@ PAR_summary <- PAR %>%
   filter(Time >= "06:00" & Time <= "18:00") %>%
   group_by(Date, Species, Exp_Day) %>%
   summarise(daily_PAR = mean(PAR, na.rm = TRUE),
-    daily_max_PAR = max(PAR, na.rm = TRUE),
-    .groups = "drop") %>%
+            daily_max_PAR = max(PAR, na.rm = TRUE),
+            .groups = "drop") %>%
   group_by(Species) %>%
   summarise(PAR_mean = mean(daily_PAR, na.rm = TRUE),
-    PAR_sd = sd(daily_PAR, na.rm = TRUE),
-    max_PAR = max(daily_max_PAR, na.rm = TRUE),
-    .groups = "drop")
-
-```
+            PAR_sd = sd(daily_PAR, na.rm = TRUE),
+            max_PAR = max(daily_max_PAR, na.rm = TRUE),
+            .groups = "drop")
 
 
-## WATER - Nutrients
-```{r}
+### Water Nutrients ###
+#######################
+
 nuts <- read.csv("DATA/water_nuts.csv")
 doc <- read.csv("DATA/DOC.csv")
 
@@ -427,11 +391,9 @@ water$Species<-as.factor(water$Species)
 water$Treatment<-as.factor(water$Treatment)
 water$Blue_Tank<-as.factor(water$Blue_Tank)
 water$Temperature<-as.factor(water$Temperature)
-```
 
-```{r}
-## Linear Mixed Effects Models
-##############################
+## Linear Mixed Effects Models ##
+
 ### Dosing Containers
 TN_model <- water %>%
   filter(Tank == "Dosing") %>%
@@ -505,8 +467,9 @@ anova(DON_model)
 DON_model_emm <- emmeans(DON_model, pairwise ~ Treatment, adjust = "tukey")
 DON_model_emm
 
-############################
-### Aquaria Models
+
+### Aquaria Models ###
+
 TN_model_t1 <- water %>%
   filter(Tank == "Aquaria" & Timepoint == "T1") %>%
   lmer(TN ~ Treatment + Temperature + (1|Species) , data= .)
@@ -634,10 +597,10 @@ summary(DON_model_t2)
 anova(DON_model_t2)
 DON_model_t2_emm <- emmeans(DON_model_t2, pairwise ~ Treatment, adjust = "tukey")
 DON_model_t2_emm
-```
 
+### Water Plots ###
 
-```{r}
+# Bi-variate plots
 # TN vs TP
 
 TN_vs_TP <- ggplot(water,aes(x = TN, y = TP, color = Treatment, shape = Tank, group = interaction(Treatment, Tank))) +
@@ -646,22 +609,20 @@ TN_vs_TP <- ggplot(water,aes(x = TN, y = TP, color = Treatment, shape = Tank, gr
   scale_color_manual(values = naste_colors) +
   scale_fill_manual(values = naste_colors) +
   scale_shape_manual(values = c(16, 17)) +
-scale_x_log10(breaks = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
-  labels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100")) +
-scale_y_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 4, 5, 7, 10),
-  labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "4", "5", "7", "10"))+
+  scale_x_log10(breaks = c(1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100),
+                labels = c("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "20", "30", "40", "50", "60", "70", "80", "90", "100")) +
+  scale_y_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 4, 5, 7, 10),
+                labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "4", "5", "7", "10"))+
   labs(x = "TN",
-    y = "TP",
-    color = "Treatment",
-    fill = "Treatment",
-    shape = "Tank") +
+       y = "TP",
+       color = "Treatment",
+       fill = "Treatment",
+       shape = "Tank") +
   theme_classic(base_size = 18) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8), 
         axis.line = element_line(color = "black"))
 TN_vs_TP
 ggsave("PLOTS/TN_vs_TP.png")
-
-
 
 # NH4 vs N+N
 
@@ -671,15 +632,15 @@ NH4_vs_N.N <-ggplot(water,aes(x = N.N, y = Ammonia, color = Treatment, shape = T
   scale_color_manual(values = naste_colors) +
   scale_fill_manual(values = naste_colors) +
   scale_shape_manual(values = c(16, 17)) +
-scale_x_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 5, 7, 10),
-  labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "5", "7", "10")) +
-scale_y_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 5, 7, 10, 20, 30, 50, 70),
-  labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "5", "7", "10", "20", "30", "50", "70"))+
+  scale_x_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 5, 7, 10),
+                labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "5", "7", "10")) +
+  scale_y_log10(breaks = c(0.1, 0.2, 0.3, 0.5, 0.7, 1, 2, 3, 5, 7, 10, 20, 30, 50, 70),
+                labels = c("0.1", "0.2", "0.3", "0.5", "0.7", "1", "2", "3", "5", "7", "10", "20", "30", "50", "70"))+
   labs(x = "N+N",
-  y = expression(NH[4] ^"+"),
-    color = "Treatment",
-    fill = "Treatment",
-    shape = "Tank") +
+       y = expression(NH[4] ^"+"),
+       color = "Treatment",
+       fill = "Treatment",
+       shape = "Tank") +
   theme_classic(base_size = 18) +
   theme(panel.border = element_rect(color = "black", fill = NA, linewidth = 0.8))
 NH4_vs_N.N
@@ -687,40 +648,37 @@ NH4_vs_N.N
 ggsave("PLOTS/NH4_vs_N.N.png")
 
 
-
-```
-```{r, echo=FALSE}
-# Add TIN expected, drawdown, and proportional drawdown columns to the dataframe
+# Add DIN expected, drawdown, and proportional drawdown columns to the dataframe
 nuts_drawdown <- nuts %>%
   left_join(filter(nuts, Tank == "Dosing") %>%
-      dplyr::select(Timepoint, Treatment, Species, DIN),  
-    by = c("Timepoint", "Treatment", "Species"),  
-    suffix = c("", "_dosing")) %>%
+              dplyr::select(Timepoint, Treatment, Species, DIN),  
+            by = c("Timepoint", "Treatment", "Species"),  
+            suffix = c("", "_dosing")) %>%
   mutate(expected_DIN = ifelse(Tank == "Aquaria", (DIN_dosing * 0.109) + (2.562 * 0.891), NA_real_),
-  drawdown_DIN = ifelse(is.na(expected_DIN), NA_real_, expected_DIN - DIN),
-   prop_DIN = ifelse(is.na(drawdown_DIN) | is.na(expected_DIN), NA_real_, drawdown_DIN / expected_DIN)) %>%
+         drawdown_DIN = ifelse(is.na(expected_DIN), NA_real_, expected_DIN - DIN),
+         prop_DIN = ifelse(is.na(drawdown_DIN) | is.na(expected_DIN), NA_real_, drawdown_DIN / expected_DIN)) %>%
   dplyr::select(-DIN_dosing)
 
 # Add TP expected, drawdown, and proportional drawdown columns to the dataframe
 nuts_drawdown <- nuts_drawdown %>%
   left_join(filter(nuts, Tank == "Dosing") %>%
-      dplyr::select(Timepoint, Treatment, Species, TP), 
-    by = c("Timepoint", "Treatment", "Species"),  
-    suffix = c("", "_dosing")) %>%
+              dplyr::select(Timepoint, Treatment, Species, TP), 
+            by = c("Timepoint", "Treatment", "Species"),  
+            suffix = c("", "_dosing")) %>%
   mutate(expected_TP = ifelse( Tank == "Aquaria", (TP_dosing * 0.109) + (0.248 * 0.891), NA_real_),
-  drawdown_TP = ifelse(is.na(expected_TP), NA_real_, expected_TP - TP),
-   prop_TP = ifelse(is.na(drawdown_TP) | is.na(expected_TP), NA_real_, drawdown_TP / expected_TP)) %>%
+         drawdown_TP = ifelse(is.na(expected_TP), NA_real_, expected_TP - TP),
+         prop_TP = ifelse(is.na(drawdown_TP) | is.na(expected_TP), NA_real_, drawdown_TP / expected_TP)) %>%
   dplyr::select(-TP_dosing)
 
 # Add PO4 expected, drawdown, and proportional drawdown columns to the dataframe
 nuts_drawdown <- nuts_drawdown %>%
   left_join(filter(nuts, Tank == "Dosing") %>%
-      dplyr::select(Timepoint, Treatment, Species, Phosphate),
-    by = c("Timepoint", "Treatment", "Species"), 
-    suffix = c("", "_dosing")) %>%
+              dplyr::select(Timepoint, Treatment, Species, Phosphate),
+            by = c("Timepoint", "Treatment", "Species"), 
+            suffix = c("", "_dosing")) %>%
   mutate(expected_PO4 = ifelse(Tank == "Aquaria", (Phosphate_dosing * 0.109) + (0.248 * 0.891), NA_real_),
-  drawdown_PO4 = ifelse(is.na(expected_PO4), NA_real_, expected_PO4 - Phosphate),
-   prop_PO4 = ifelse(is.na(drawdown_PO4) | is.na(expected_PO4),NA_real_, drawdown_PO4 / expected_PO4)) %>%
+         drawdown_PO4 = ifelse(is.na(expected_PO4), NA_real_, expected_PO4 - Phosphate),
+         prop_PO4 = ifelse(is.na(drawdown_PO4) | is.na(expected_PO4),NA_real_, drawdown_PO4 / expected_PO4)) %>%
   dplyr::select(-Phosphate_dosing)
 
 # remove dosing container rows
@@ -738,17 +696,17 @@ drawdown_long <- nuts_drawdown %>%
                values_to = "Proportional_Drawdown")
 drawdown_long$Nutrient <- factor(drawdown_long$Nutrient, levels = c("prop_DIN", "prop_PO4"))
 
-# plot
+# Drawdown Plot
 prop_drawdown_plot <- ggplot(data = drawdown_long, aes(x = Treatment, y = Proportional_Drawdown, fill = Treatment, alpha = Nutrient)) +
   geom_boxplot(position = position_dodge(width = 0.75)) +
   geom_jitter(aes(group = Nutrient),
-            position = position_dodge(width = 0.75),
-            shape = 21, color = "black", alpha = 0.6) +
+              position = position_dodge(width = 0.75),
+              shape = 21, color = "black", alpha = 0.6) +
   facet_wrap(~Species, ncol = 1) +
   scale_fill_manual(values = naste_colors) +
-scale_alpha_manual(values = c("prop_DIN" = 1, "prop_PO4" = 0.3),
-  labels = c("prop_DIN" = "DIN", "prop_PO4" = "PO4"),
-  name = "Nutrient")+
+  scale_alpha_manual(values = c("prop_DIN" = 1, "prop_PO4" = 0.3),
+                     labels = c("prop_DIN" = "DIN", "prop_PO4" = "PO4"),
+                     name = "Nutrient")+
   guides(fill = "none")+
   guides(alpha = guide_legend(override.aes = list(fill = "gray50"))) +
   ylab("Percent Drawdown") +
@@ -759,14 +717,13 @@ scale_alpha_manual(values = c("prop_DIN" = 1, "prop_PO4" = 0.3),
 prop_drawdown_plot
 
 ggsave("PLOTS/prop_drawdown_plot.png")
-```
 
+##############################
+####### Coral Analysis #######
+##############################
 
-# CORAL DATA
-
-
-```{r}
-## CBASS
+### CBASS ###
+#############
 
 # Load CBASS data
 cbass <- read.csv("DATA/NASTE_CBASS.csv")
@@ -776,7 +733,6 @@ cbass$Species <- as.factor(cbass$Species)
 cbass$Genotype <- as.factor(cbass$Genotype)
 
 # Generate ED5, ED50, ED95 data
-
 grouping_properties <- c("Species")
 drm_formula <- "PAM_value ~ Temperature"
 models <- fit_drms(cbass, grouping_properties, drm_formula, is_curveid = TRUE)
@@ -792,12 +748,10 @@ eds_df <-
 
 eds_df
 
+#############
+### Fv/Fm ###
+#############
 
-```
-
-
-## PAM
-```{r}
 # Load PAM data
 PAM <- read.csv("DATA/NASTE_pam.csv")
 
@@ -812,17 +766,16 @@ PAM$Day<-as.numeric(PAM$Day)
 PAM$Frag_ID<-as.factor(PAM$Frag_ID)
 PAM$Genotype<-as.factor(PAM$Genotype)
 PAM$Trt_temp<-as.factor(PAM$Trt_temp)
-```
+
 
 ### Porites
-```{r}
 # Write different model options
-  # Model 1 -different slope and different intercept
-  # Model 2 - same slope and different intercept
-  # Model 3 - global smoother assuming no treatment differences by day
+# Model 1 -different slope and different intercept
+# Model 2 - same slope and different intercept
+# Model 3 - global smoother assuming no treatment differences by day
 
 # Note-allowing 'k' to be set automatically by the model, we can adjust to increase or decrease the 'wiggliness'
-  
+
 pc_pam_1 <- gam(FvFm~ Trt_temp + s(Day,by=Trt_temp),data=subset(PAM, Species %in% c("Porites"))) #interaction term smoothed by day
 summary(pc_pam_1)
 anova.gam(pc_pam_1)
@@ -838,9 +791,7 @@ anova.gam(pc_pam_3)
 # compare models
 pc_AIC <- AIC (pc_pam_1, pc_pam_2, pc_pam_3)
 print(pc_AIC) # best option is pc_pam_1 (smallest AIC score) with the interaction term smoothed by day
-```
 
-```{r}
 #anova just after T2 (day 59 - heat turned off day 55)
 # guano higher than control and inorg, effluent similar to all treatments
 
@@ -861,11 +812,7 @@ summary(pc_t3_pam)
 emmeans(pc_t3_pam, pairwise ~ Treatment, adjust = "tukey")
 
 
-```
-
-```{r}
-########## PLOT WITH TIDYGAM #############
-
+### Plot with Tidygam
 
 pc_pam_preds <- predict_gam(pc_pam_1, length_out = 50)
 pc_pam_plot <- plot(pc_pam_preds, "Day", "Trt_temp") +
@@ -893,17 +840,15 @@ pc_pam_plot <- pc_pam_plot+
 pc_pam_plot
 
 ggsave("PLOTS/pc_pam_plot.png", width = 9, height = 7, units = "in")
-```
 
-```{r}
-#plot differences
+### Plot differences
 
-## temperature effect
+## Temperature effect
 pc_ca_vs_ch <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Ambient", "Control.Heated")))
 plot(pc_ca_vs_ch)+
   ggtitle("Control Ambient vs Control Heated")+
   ylim(-0.15, 0.175)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ca_vs_ch.png")
 
 
@@ -911,7 +856,7 @@ pc_ea_vs_eh <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(pc_ea_vs_eh)+
   ggtitle("Effluent Ambient vs Effluent Heated")+
   ylim(-0.15, 0.175)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ea_vs_eh.png")
 
 
@@ -919,7 +864,7 @@ pc_ga_vs_gh <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Guano.Ambient",
 plot(pc_ga_vs_gh)+
   ggtitle("Guano Ambient vs Guano Heated")+
   ylim(-0.15, 0.175)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ga_vs_gh.png")
 
 
@@ -927,16 +872,16 @@ pc_ia_vs_ih <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Inorganic.Ambie
 plot(pc_ia_vs_ih)+
   ggtitle("Inorganic Ambient vs Inorganic Heated")+
   ylim(-0.15, 0.175)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ia_vs_ih.png")
 
 
-# ambient differences
+## Ambient differences
 pc_ca_vs_ea <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Ambient", "Effluent.Ambient")))
 plot(pc_ca_vs_ea)+
   ggtitle("Control Ambient vs Effluent Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ca_vs_ea.png")
 
 
@@ -944,7 +889,7 @@ pc_ca_vs_ga <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Ambient
 plot(pc_ca_vs_ga)+
   ggtitle("Control Ambient vs Guano Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ca_vs_ga.png")
 
 
@@ -952,7 +897,7 @@ pc_ca_vs_ia <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Ambient
 plot(pc_ca_vs_ia)+
   ggtitle("Control Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ca_vs_ia.png")
 
 
@@ -960,7 +905,7 @@ pc_ea_vs_ga <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(pc_ea_vs_ga)+
   ggtitle("Effluent Ambient vs Guano Ambient")+
   ylim(-0.15, 0.2)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ea_vs_ga.png")
 
 
@@ -968,7 +913,7 @@ pc_ea_vs_ia <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(pc_ea_vs_ia)+
   ggtitle("Effluent Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.175)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ea_vs_ia.png")
 
 
@@ -976,16 +921,16 @@ pc_ga_vs_ia <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Guano.Ambient",
 plot(pc_ga_vs_ia)+
   ggtitle("Guano Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ga_vs_ia.png")
 
 
-# heated differences
+## Heated differences
 pc_ch_vs_eh <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Heated", "Effluent.Heated")))
 plot(pc_ch_vs_eh)+
   ggtitle("Control Heated vs Effluent Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ch_vs_eh.png")
 
 
@@ -993,7 +938,7 @@ pc_ch_vs_gh <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Heated"
 plot(pc_ch_vs_gh)+
   ggtitle("Control Heated vs Guano Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ch_vs_gh.png")
 
 
@@ -1001,7 +946,7 @@ pc_ch_vs_ih <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Control.Heated"
 plot(pc_ch_vs_ih)+
   ggtitle("Control Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_ch_vs_ih.png")
 
 
@@ -1009,7 +954,7 @@ pc_eh_vs_gh <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Effluent.Heated
 plot(pc_eh_vs_gh)+
   ggtitle("Effluent Heated vs Guano Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_eh_vs_gh.png")
 
 
@@ -1017,7 +962,7 @@ pc_eh_vs_ih <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Effluent.Heated
 plot(pc_eh_vs_ih)+
   ggtitle("Effluent Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_eh_vs_gh.png")
 
 
@@ -1025,20 +970,19 @@ pc_gh_vs_ih <-get_difference(pc_pam_1, "Day", list(Trt_temp = c("Guano.Heated", 
 plot(pc_gh_vs_ih)+
   ggtitle("Guano Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/pc_gh_vs_ih.png")
 
-```
+
 
 ### Montipora
-```{r}
 # Write different model options
-  # Model 1 -different slope and different intercept
-  # Model 2 - same slope and different intercept
-  # Model 3 - global smoother assuming no treatment differences by day
+# Model 1 -different slope and different intercept
+# Model 2 - same slope and different intercept
+# Model 3 - global smoother assuming no treatment differences by day
 
 # Note-allowing 'k' to be set automatically by the model, we can adjust to increase or decrease the 'wiggliness'
-  
+
 mc_pam_1 <- gam(FvFm~ Trt_temp + s(Day,by=Trt_temp),data=subset(PAM, Species %in% c("Montipora"))) #interaction term smoothed by day
 summary(mc_pam_1)
 anova.gam(mc_pam_1)
@@ -1054,9 +998,7 @@ anova.gam(mc_pam_3)
 # compare models
 mc_AIC <- AIC (mc_pam_1, mc_pam_2, mc_pam_3)
 print(mc_AIC) # best option is mc_pam_1 (smallest AIC score) with the interaction term smoothed by day
-```
 
-```{r}
 # anova at T2
 mc_t2_pam <- aov(FvFm ~ Treatment, data = subset(PAM, Species %in% c("Montipora") & Day %in% c("80") & Temperature %in% c("Heated")))
 summary(mc_t2_pam)
@@ -1069,11 +1011,7 @@ pairs <- pairs(emm, adjust = "tukey")
 cld <- multcomp::cld(emm, Letters = letters, adjust = "tukey")
 cld
 
-```
-
-```{r}
-########## PLOT USING TIDYGAM #############
-
+### Plot with Tidygam
 
 mc_pam_preds <- predict_gam(mc_pam_1, length_out = 50)
 mc_pam_plot <- plot(mc_pam_preds, "Day", "Trt_temp") +
@@ -1101,17 +1039,15 @@ mc_pam_plot <- mc_pam_plot+
 mc_pam_plot
 
 ggsave("PLOTS/mc_pam_plot.png", width = 9, height = 7, units = "in")
-```
 
-```{r}
-#plot differences
+### Plot differences
 
-## temperature effect
+## Temperature effect
 mc_ca_vs_ch <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Ambient", "Control.Heated")))
 plot(mc_ca_vs_ch)+
   ggtitle("Control Ambient vs Control Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ca_vs_ch.png")
 
 
@@ -1119,7 +1055,7 @@ mc_ea_vs_eh <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(mc_ea_vs_eh)+
   ggtitle("Effluent Ambient vs Effluent Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ea_vs_eh.png")
 
 
@@ -1127,7 +1063,7 @@ mc_ga_vs_gh <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Guano.Ambient",
 plot(mc_ga_vs_gh)+
   ggtitle("Guano Ambient vs Guano Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ga_vs_gh.png")
 
 
@@ -1135,16 +1071,16 @@ mc_ia_vs_ih <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Inorganic.Ambie
 plot(mc_ia_vs_ih)+
   ggtitle("Inorganic Ambient vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ia_vs_ih.png")
 
 
-# ambient differences
+## Ambient differences
 mc_ca_vs_ea <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Ambient", "Effluent.Ambient")))
 plot(mc_ca_vs_ea)+
   ggtitle("Control Ambient vs Effluent Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ca_vs_ea.png")
 
 
@@ -1152,7 +1088,7 @@ mc_ca_vs_ga <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Ambient
 plot(mc_ca_vs_ga)+
   ggtitle("Control Ambient vs Guano Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ca_vs_ga.png")
 
 
@@ -1160,7 +1096,7 @@ mc_ca_vs_ia <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Ambient
 plot(mc_ca_vs_ia)+
   ggtitle("Control Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ca_vs_ia.png")
 
 
@@ -1168,7 +1104,7 @@ mc_ea_vs_ga <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(mc_ea_vs_ga)+
   ggtitle("Effluent Ambient vs Guano Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ea_vs_ga.png")
 
 
@@ -1176,7 +1112,7 @@ mc_ea_vs_ia <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Effluent.Ambien
 plot(mc_ea_vs_ia)+
   ggtitle("Effluent Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ea_vs_ia.png")
 
 
@@ -1184,16 +1120,16 @@ mc_ga_vs_ia <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Guano.Ambient",
 plot(mc_ga_vs_ia)+
   ggtitle("Guano Ambient vs Inorganic Ambient")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ga_vs_ia.png")
 
 
-# heated differences
+## Heated differences
 mc_ch_vs_eh <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Heated", "Effluent.Heated")))
 plot(mc_ch_vs_eh)+
   ggtitle("Control Heated vs Effluent Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ch_vs_eh.png")
 
 
@@ -1201,7 +1137,7 @@ mc_ch_vs_gh <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Heated"
 plot(mc_ch_vs_gh)+
   ggtitle("Control Heated vs Guano Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ch_vs_gh.png")
 
 
@@ -1209,7 +1145,7 @@ mc_ch_vs_ih <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Control.Heated"
 plot(mc_ch_vs_ih)+
   ggtitle("Control Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_ch_vs_ih.png")
 
 
@@ -1217,7 +1153,7 @@ mc_eh_vs_gh <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Effluent.Heated
 plot(mc_eh_vs_gh)+
   ggtitle("Effluent Heated vs Guano Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_eh_vs_gh.png")
 
 
@@ -1225,7 +1161,7 @@ mc_eh_vs_ih <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Effluent.Heated
 plot(mc_eh_vs_ih)+
   ggtitle("Effluent Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_eh_vs_ih.png")
 
 
@@ -1233,23 +1169,18 @@ mc_gh_vs_ih <-get_difference(mc_pam_1, "Day", list(Trt_temp = c("Guano.Heated", 
 plot(mc_gh_vs_ih)+
   ggtitle("Guano Heated vs Inorganic Heated")+
   ylim(-0.15, 0.15)+
-   theme(axis.title.y = element_blank())
+  theme(axis.title.y = element_blank())
 ggsave("PLOTS/mc_gh_vs_ih.png")
 
 
-
-```
-
-
-```{r}
-#### Surface Area and AFDW for normalizations
+#### Surface Area and AFDW for normalizations ###
 
 #load surface area dataset
 sa <- read.csv("DATA/NASTE_surfacearea.csv")
 
 #drop 4 negative SA datapoints
 sa <- sa %>%
-    filter(!(Frag_ID %in% c("P-4-16", "P-4-20", "P-9-1", "P-9-20") & Timepoint == "T3"))
+  filter(!(Frag_ID %in% c("P-4-16", "P-4-20", "P-9-1", "P-9-20") & Timepoint == "T3"))
 
 #load AFDW dataset
 afdw <- read.csv("DATA/naste_AFDW.csv")
@@ -1258,9 +1189,9 @@ afdw <- read.csv("DATA/naste_AFDW.csv")
 afdw <- afdw %>%
   filter(!(Frag_ID %in% c("P-2-7", "M-5-27")))
 
-```
 
-## Symbiont Density
+
+### Symbiont Density ###
 ```{r}
 symb <- read.csv("DATA/NASTE_symb_density_counts.csv")
 symb<- na.omit(symb)
@@ -1268,7 +1199,7 @@ symb<- na.omit(symb)
 #add SA and AFDW columns
 symb <- symb %>%
   dplyr::left_join(sa %>% dplyr::select(Frag_ID, Surface_area.cm2), by = "Frag_ID") %>%
-    dplyr::left_join(afdw %>% dplyr::select(Frag_ID, AFDW_gdw), by = "Frag_ID")
+  dplyr::left_join(afdw %>% dplyr::select(Frag_ID, AFDW_gdw), by = "Frag_ID")
 
 symb$Species<-as.factor(symb$Species)
 symb$Genotype<-as.factor(symb$Genotype)
@@ -1288,11 +1219,8 @@ symb <- symb %>%
 
 write.csv(symb, "DATA/NASTE_symb_final.csv")
 
-```
 
-```{r}
-# BAR PLOT
-
+# Symbiont Denisty Bar Plot
 # create facet
 symb <- symb %>%
   mutate(Facet = factor(
@@ -1317,28 +1245,22 @@ symb_summary <- symb %>%
     mean = mean(Log_Symb_density.cells..gdw, na.rm = TRUE),
     n = sum(!is.na(Log_Symb_density.cells..gdw)),
     se = sd(Log_Symb_density.cells..gdw, na.rm = TRUE) / sqrt(n),
-    .groups = "drop"
-  ) %>%
-  mutate(
-    ymin = mean - se,
-    ymax = mean + se,
-    
-    # Back-transform from log10
-    mean_bt = 10^mean,
-    ymin_bt = 10^ymin,
-    ymax_bt = 10^ymax,
-    
-    # Express as millions of cells gdw^-1
-    mean_plot = mean_bt / 10^6,
-    ymin_plot = ymin_bt / 10^6,
-    ymax_plot = ymax_bt / 10^6
-  )
+    .groups = "drop") %>%
+  mutate(ymin = mean - se, 
+         ymax = mean + se,
+         mean_bt = 10^mean,
+         ymin_bt = 10^ymin,
+         ymax_bt = 10^ymax,
+         mean_plot = mean_bt / 10^6,
+         ymin_plot = ymin_bt / 10^6,
+         ymax_plot = ymax_bt / 10^6)
+
 # define a single position_dodge object so both layers use the exact same dodge
 pd <- position_dodge2(width = 0.9, preserve = "single")
 
 # Montipora Plot
 vert_symb_bar_mc <- ggplot(data = subset(symb_summary, Facet %in% c("Montipora - Bleaching Period", "Montipora - Recovery Period")),
-  aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
+                           aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
   geom_col(aes(alpha = Temperature), color = "black", position = pd, width = 0.6) +
   geom_errorbar(aes(ymin = ymin_plot, ymax = ymax_plot), color = "black", position = pd, width = 0.6) +
   facet_wrap(~Facet, ncol = 1) +
@@ -1348,15 +1270,15 @@ vert_symb_bar_mc <- ggplot(data = subset(symb_summary, Facet %in% c("Montipora -
   xlab(NULL) +
   theme_classic() +
   theme(legend.position = "none",
-     axis.title = element_text(size = 18),
-     axis.text = element_text(size = 16),
-     strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+        axis.title = element_text(size = 18),
+        axis.text = element_text(size = 16),
+        strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
 vert_symb_bar_mc
 
 # Porites plot
 vert_symb_bar_pc <- ggplot(data = subset(symb_summary, Facet %in% c("Porites - Bleaching Period", "Porites - Recovery Period")),
-  aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
+                           aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
   geom_col(aes(alpha = Temperature), color = "black", position = pd, width = 0.6) +
   geom_errorbar(aes(ymin = ymin_plot, ymax = ymax_plot), color = "black", position = pd, width = 0.6) +
   facet_wrap(~Facet, ncol = 1) +
@@ -1366,9 +1288,9 @@ vert_symb_bar_pc <- ggplot(data = subset(symb_summary, Facet %in% c("Porites - B
   xlab(NULL) +
   theme_classic() +
   theme(legend.position = "none",
-     axis.title = element_text(size = 18),
-     axis.text = element_text(size = 16),
-     strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+        axis.title = element_text(size = 18),
+        axis.text = element_text(size = 16),
+        strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
 vert_symb_bar_pc
 
@@ -1376,10 +1298,6 @@ vert_symb_bar_pc
 ggsave("PLOTS/vert_symb_bar_mc.png")
 ggsave("PLOTS/vert_symb_bar_pc.png")
 
-```
-
-
-```{r}
 # LME's on log10 data, treatment and temp are fixed effects, genotype is random effect
 mc_t2_symb_lm <- lmer(Log_Symb_density.cells..gdw ~ Treatment*Temperature + (1|Genotype), data=subset(symb, Species %in% c("Montipora") & Timepoint %in% c("T2")))
 summary(mc_t2_symb_lm)
@@ -1404,9 +1322,7 @@ summary(pc_t3_symb_lm)
 anova(pc_t3_symb_lm, type=3)
 pc_t3_symb_posthoc <- emmeans(pc_t3_symb_lm, pairwise ~ Temperature | Treatment)
 multcomp::cld(pc_t3_symb_posthoc, Letters = letters) 
-```
 
-```{r, fig.show='hide'}
 # Check for normality and homoscedasticity in symbiont density data
 
 ## Montipora
@@ -1426,7 +1342,7 @@ plot(mc_fitted_symb_t2, mc_res_symb_t2,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Mcap T2 Symb Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 ### T3
 mc_res_symb_t3 <- residuals(mc_t3_symb_lm)
@@ -1444,7 +1360,7 @@ plot(mc_fitted_symb_t3, mc_res_symb_t3,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Mcap T3 Symb Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 # Montipora T2 and T3 data shows mild non-normality and non-homoscedasticity, however lmer and anova should be able to handle that since my sample size is large. 
 
@@ -1465,7 +1381,7 @@ plot(pc_fitted_symb_t2, pc_res_symb_t2,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Pcom T2 Symb Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 ### T3
 pc_res_symb_t3 <- residuals(pc_t3_symb_lm)
@@ -1483,14 +1399,13 @@ plot(pc_fitted_symb_t3, pc_res_symb_t3,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Pcom T3 Symb Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 # Porites T2 and T3 data shows mild non-normality and non-homoscedasticity, however lmer and anova should be able to handle that since my sample size is large
-```
 
-## Chlorophyll
 
-```{r, fig.show ='hide'}
+### Chlorophyll ###
+
 #load data
 chl <- read.csv("DATA/NASTE_chl.csv")
 
@@ -1500,7 +1415,7 @@ chl<-subset(chl, Species!="BLANK")
 #join surface area column to chl dataframe
 chl <- chl %>%
   dplyr::left_join(sa %>% dplyr::select(Frag_ID, Surface_area.cm2), by = "Frag_ID") %>%
-    dplyr::left_join(afdw %>% dplyr::select(Frag_ID, AFDW_gdw), by = "Frag_ID")
+  dplyr::left_join(afdw %>% dplyr::select(Frag_ID, AFDW_gdw), by = "Frag_ID")
 
 # create column for chl/sa (ug/cm2)
 chl <- chl %>%
@@ -1534,10 +1449,7 @@ chl <- chl %>%
 
 write.csv(symb, "DATA/NASTE_chl_final.csv")
 
-```
-
-```{r}
-# BAR PLOT
+# Chlorophyll Bar Plot
 
 # create facet
 chl <- chl %>%
@@ -1551,30 +1463,30 @@ chl <- chl %>%
 
 # recode facet for plot labels
 chl$Facet <- dplyr::recode(chl$Facet,
-                            "Montipora T2" = "Montipora - Bleaching Period",
-                            "Montipora T3" = "Montipora - Recovery Period",
-                            "Porites T2" = "Porites - Bleaching Period",
-                            "Porites T3" = "Porites - Recovery Period")
+                           "Montipora T2" = "Montipora - Bleaching Period",
+                           "Montipora T3" = "Montipora - Recovery Period",
+                           "Porites T2" = "Porites - Bleaching Period",
+                           "Porites T3" = "Porites - Recovery Period")
 
 chl_summary <- chl %>%
   filter(Timepoint %in% c("T2", "T3")) %>%
   group_by(Treatment, Temperature, Facet) %>%
   summarise(mean = mean(Log_Chl_content.ug..gdw, na.rm = TRUE),
-    n = sum(!is.na(Log_Chl_content.ug..gdw)),
-    se = sd(Log_Chl_content.ug..gdw, na.rm = TRUE) / sqrt(n),
-    .groups = "drop") %>%
-  mutate(ymin = mean - se, ymax = mean + se,
-    # Back-transform from log10 for plot
-    mean_plot = 10^mean,
-    ymin_plot = 10^ymin,
-    ymax_plot = 10^ymax)
+            n = sum(!is.na(Log_Chl_content.ug..gdw)),
+            se = sd(Log_Chl_content.ug..gdw, na.rm = TRUE) / sqrt(n),
+            .groups = "drop") %>%
+  mutate(ymin = mean - se, 
+         ymax = mean + se,
+         mean_plot = 10^mean,
+         ymin_plot = 10^ymin,
+         ymax_plot = 10^ymax)
 
 # define a single position_dodge object so both layers use the exact same dodge
 pd <- position_dodge2(width = 0.9, preserve = "single")
 
 # Montipora Plot
 vert_chl_bar_mc <- ggplot(data = subset(chl_summary, Facet %in% c("Montipora - Bleaching Period", "Montipora - Recovery Period")),
-  aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
+                          aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
   geom_col(aes(alpha = Temperature), color = "black", position = pd, width = 0.6) +
   geom_errorbar(aes(ymin = ymin_plot, ymax = ymax_plot), color = "black", position = pd, width = 0.6) +
   facet_wrap(~Facet, ncol = 1) +
@@ -1584,15 +1496,15 @@ vert_chl_bar_mc <- ggplot(data = subset(chl_summary, Facet %in% c("Montipora - B
   xlab(NULL) +
   theme_classic() +
   theme(legend.position = "none",
-     axis.title = element_text(size = 18),
-     axis.text = element_text(size = 16),
-     strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+        axis.title = element_text(size = 18),
+        axis.text = element_text(size = 16),
+        strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
 vert_chl_bar_mc
 
 # Porites plot
 vert_chl_bar_pc <- ggplot(data = subset(chl_summary, Facet %in% c("Porites - Bleaching Period", "Porites - Recovery Period")),
-  aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
+                          aes(x = Temperature, y = mean_plot, fill = Treatment, group = Temperature, alpha = Temperature)) +
   geom_col(aes(alpha = Temperature), color = "black", position = pd, width = 0.6) +
   geom_errorbar(aes(ymin = ymin_plot, ymax = ymax_plot), color = "black", position = pd, width = 0.6) +
   facet_wrap(~Facet, ncol = 1) +
@@ -1600,11 +1512,11 @@ vert_chl_bar_pc <- ggplot(data = subset(chl_summary, Facet %in% c("Porites - Ble
   scale_alpha_manual(values = c("Ambient" = 1, "Heated" = 0.5)) +
   ylab(expression("Total Chlorophyll (" * mu * "g gdw"^{-1} * ")")) +
   xlab(NULL) +
-   theme_classic() +
+  theme_classic() +
   theme(legend.position = "none",
-     axis.title = element_text(size = 18),
-     axis.text = element_text(size = 16),
-     strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+        axis.title = element_text(size = 18),
+        axis.text = element_text(size = 16),
+        strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
 vert_chl_bar_pc
 
@@ -1612,11 +1524,6 @@ vert_chl_bar_pc
 ggsave("PLOTS/vert_chl_bar_mc.png")
 ggsave("PLOTS/vert_chl_bar_pc.png")
 
-```
-
-
-
-```{r}
 # LME's on log10 data, treatment and temp are fixed effects, genotype is random effect
 
 # Montipora
@@ -1645,9 +1552,7 @@ anova(pc_t3_chl_lm, type=3)
 pc_t3_chl_posthoc <- emmeans(pc_t3_chl_lm, pairwise ~ Temperature | Treatment)
 multcomp::cld(pc_t3_chl_posthoc, Letters = letters) 
 
-```
 
-```{r, fig.show ='hide'}
 # Check for normality and homoscedasticity in chlorophyll data
 
 ## Montipora
@@ -1667,7 +1572,7 @@ plot(mc_fitted_chl_t2, mc_res_chl_t2,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Mcap T2 Chl Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 ### T3
 mc_res_chl_t3 <- residuals(mc_t3_chl_lm)
@@ -1685,7 +1590,7 @@ plot(mc_fitted_chl_t3, mc_res_chl_t3,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Mcap T3 Chl Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 # Montipora T2 and T3 data shows mild non-normality and non-homoscedasticity, however lmer and anova should be able to handle that since my sample size is large
 
@@ -1706,7 +1611,7 @@ plot(pc_fitted_chl_t2, pc_res_chl_t2,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Pcom T2 Chl Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 ### T3
 pc_res_chl_t3 <- residuals(pc_t3_chl_lm)
@@ -1724,21 +1629,18 @@ plot(pc_fitted_chl_t3, pc_res_chl_t3,
      xlab = "Fitted values",
      ylab = "Residuals",
      main = "Pcom T3 Chl Residuals vs Fitted")+
-abline(h = 0, col = "red")
+  abline(h = 0, col = "red")
 
 # Porites T2 and T3 data shows mild non-normality and non-homoscedasticity, however lmer and anova should be able to handle that since my sample size is large
-```
 
+### Buoyant Weight ###
 
-## Buoyant Weight
-
-```{r}
 # load dataset 
 bw <- read.csv("DATA/NASTE_buoyantweight.csv")
 
 # format
 bw <- bw %>% drop_na() %>% # remove rows with NAs
-    filter(Timepoint %in% c("T0", "T3")) # select only T0 and T3
+  filter(Timepoint %in% c("T0", "T3")) # select only T0 and T3
 
 
 ## Deal with Scale Drift ##
@@ -1784,8 +1686,7 @@ bw <- bw %>%
     Date == as.Date("2023-10-06") & Species == "Montipora" ~ Wet_weight.g - 0.2265000,
     Date == as.Date("2023-10-07") & Species == "Porites" ~ Wet_weight.g - 0.3649,
     Date == as.Date("2023-10-08") & Species == "Porites" ~ Wet_weight.g - 0.3541857,
-    TRUE ~ Wet_weight.g  # Keep other values unchanged
-  ))
+    TRUE ~ Wet_weight.g))
 
 
 ########
@@ -1850,10 +1751,7 @@ bw_final$Timepoint <- as.factor(bw_final$Timepoint)
 bw_final$Species <- as.factor(bw_final$Species)
 bw_final$Delta_wt_g..cm2 <- as.numeric(bw_final$Delta_wt_g..cm2)
 
-```
-
-```{r}
-# Barplot
+# Buoyant Weight Bar Plot
 # create facet
 bw_final <- bw_final %>%
   mutate(Facet = factor(
@@ -1865,31 +1763,31 @@ bw_final <- bw_final %>%
       "Porites T3")))
 
 bw_final$Facet <- dplyr::recode(bw_final$Facet,
-                            "Montipora T2" = "Montipora - Bleaching Period",
-                            "Montipora T3" = "Montipora - Recovery Period",
-                            "Porites T2" = "Porites - Bleaching Period",
-                            "Porites T3" = "Porites - Recovery Period")
+                                "Montipora T2" = "Montipora - Bleaching Period",
+                                "Montipora T3" = "Montipora - Recovery Period",
+                                "Porites T2" = "Porites - Bleaching Period",
+                                "Porites T3" = "Porites - Recovery Period")
 
 bw_summary <- bw_final %>%
   filter(Timepoint %in% c("T3")) %>%
   group_by(Treatment, Temp_trt, Species) %>%
   summarise(mean = mean(Delta_wt_g..cm2, na.rm = TRUE),
-    se = sd(Delta_wt_g..cm2, na.rm = TRUE) / sqrt(n()),
-    .groups = "drop") %>%
-  mutate(ymin = mean - se,ymax = mean + se)
+            se = sd(Delta_wt_g..cm2, na.rm = TRUE) / sqrt(n()),
+            .groups = "drop") %>%
+  mutate(ymin = mean - se, ymax = mean + se)
 
 # define a single position_dodge object so both layers use the exact same dodge
 pd <- position_dodge2(width = 0.9, preserve = "single")
 
 vert_growth_bar <- ggplot(bw_summary,aes(x = Temp_trt, y = mean, fill = Treatment, group = Temp_trt, alpha = Temp_trt)) +
   geom_col(aes(alpha = Temp_trt),
-    color = "black",
-    position = pd,
-    width = 0.6) +
+           color = "black",
+           position = pd,
+           width = 0.6) +
   geom_errorbar(aes(ymin = ymin, ymax = ymax),
-    color = "black",
-    position = pd,
-    width = 0.6) +
+                color = "black",
+                position = pd,
+                width = 0.6) +
   facet_wrap(~Species, ncol = 1, scales = "free_y") +
   scale_fill_manual(values = naste_colors) +
   scale_alpha_manual(values = c("Ambient" = 1, "Heated" = 0.5), guide = "none") +
@@ -1897,14 +1795,13 @@ vert_growth_bar <- ggplot(bw_summary,aes(x = Temp_trt, y = mean, fill = Treatmen
   xlab(NULL) +
   theme_classic() +
   theme(axis.title = element_text(size = 18),
-     axis.text = element_text(size = 16),
-     strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
+        axis.text = element_text(size = 16),
+        strip.text = element_text(size = 20),panel.border = element_rect(colour = "black", fill = NA, linewidth = 1)) +
   scale_y_continuous(expand = expansion(mult = c(0, 0.05)))
 vert_growth_bar
 
 ggsave("PLOTS/growth_plot.png")
-```
-```{r}
+
 # Linear Mixed Effects Models on the change in weight over the experiment
 mc_bw_lm <- lmer(Delta_wt_g..cm2 ~ Treatment*Temp_trt + (1|Genotype), data=subset(bw_final, Species %in% c("Montipora")))
 summary(mc_bw_lm)
@@ -1920,10 +1817,6 @@ pc_bw_posthoc <- emmeans(pc_bw_lm, pairwise ~ Temp_trt)
 multcomp::cld(pc_bw_posthoc, Letters = letters) 
 
 
-
-```
-
-```{r, fig.show ='hide'}
 #check for normality and homoscedasticity
 
 mc_res <- residuals(mc_bw_lm)
@@ -1963,5 +1856,5 @@ plot(pc_fitted, pc_res,
      main = "Residuals vs Fitted")
 abline(h = 0, col = "red")
 
-```
+
 
